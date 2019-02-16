@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import ConfigParser
+import cv2
 
 from help_functions import load_hdf5
 from help_functions import visualize
@@ -13,22 +14,28 @@ from pre_processing import my_PreProc
 # random.seed(10)
 
 #Load the original data and return the extracted patches for training/testing
-def get_data_training(DRIVE_train_imgs_original,
-                      DRIVE_train_groudTruth,
+def get_data(resize_scale=565):
+    # imgs = np.load('image_preprocessed.npy') #20,1, 4000,4000
+    # masks = np.load('masks_preprocessed.npy').reshape(-1, 1, 4000, 4000) #20,4000,4000
+    # imgs, masks = imgs[:,:, 500:3500, 500:3500], masks[:,:, 500:3500, 500:3500] #20,1, 2000,2000
+    # imgs_new = np.zeros((imgs.shape[0], 1, resize_scale, resize_scale))
+    # masks_new = np.zeros((masks.shape[0], 1, resize_scale, resize_scale))
+    # for i in range(imgs.shape[0]):
+    # 	imgs_new[i,0] = cv2.resize(imgs[i,0], (resize_scale, resize_scale))
+    # 	masks_new[i,0] = cv2.resize(masks[i,0], (resize_scale, resize_scale))
+    # np.save('images_new500.npy', imgs_new)
+    # np.save('masks_new500.npy', masks_new)
+    imgs_new = np.load('images_new500.npy') #20,1, 500,500
+    masks_new = np.load('masks_new500.npy') #20,1, 500,500
+    return imgs_new, masks_new
+
+def get_data_training(train_imgs,
+                      train_masks,
                       patch_height,
                       patch_width,
                       N_subimgs,
                       inside_FOV):
-    train_imgs_original = load_hdf5(DRIVE_train_imgs_original)
-    train_masks = load_hdf5(DRIVE_train_groudTruth) #masks always the same
-    # visualize(group_images(train_imgs_original[0:20,:,:,:],5),'imgs_train')#.show()  #check original imgs train
 
-
-    train_imgs = my_PreProc(train_imgs_original)
-    train_masks = train_masks/255.
-
-    train_imgs = train_imgs[:,:,9:574,:]  #cut bottom and top so now it is 565*565
-    train_masks = train_masks[:,:,9:574,:]  #cut bottom and top so now it is 565*565
     data_consistency_check(train_imgs,train_masks)
 
     #check masks are within 0-1
@@ -51,17 +58,11 @@ def get_data_training(DRIVE_train_imgs_original,
 
 
 #Load the original data and return the extracted patches for training/testing
-def get_data_testing(DRIVE_test_imgs_original, DRIVE_test_groudTruth, Imgs_to_test, patch_height, patch_width):
+def get_data_testing(test_imgs, test_masks, Imgs_to_test, patch_height, patch_width):
     ### test
-    test_imgs_original = load_hdf5(DRIVE_test_imgs_original)
-    test_masks = load_hdf5(DRIVE_test_groudTruth)
-
-    test_imgs = my_PreProc(test_imgs_original)
-    test_masks = test_masks/255.
-
     #extend both images and masks so they can be divided exactly by the patches dimensions
-    test_imgs = test_imgs[0:Imgs_to_test,:,:,:]
-    test_masks = test_masks[0:Imgs_to_test,:,:,:]
+    # test_imgs = test_imgs[0:Imgs_to_test,:,:,:]
+    # test_masks = test_masks[0:Imgs_to_test,:,:,:]
     test_imgs = paint_border(test_imgs,patch_height,patch_width)
     test_masks = paint_border(test_masks,patch_height,patch_width)
 
@@ -91,17 +92,18 @@ def get_data_testing(DRIVE_test_imgs_original, DRIVE_test_groudTruth, Imgs_to_te
 
 # Load the original data and return the extracted patches for testing
 # return the ground truth in its original shape
-def get_data_testing_overlap(DRIVE_test_imgs_original, DRIVE_test_groudTruth, Imgs_to_test, patch_height, patch_width, stride_height, stride_width):
+def get_data_testing_overlap(test_imgs, test_masks, Imgs_to_test, patch_height, patch_width, stride_height, stride_width):
     ### test
-    test_imgs_original = load_hdf5(DRIVE_test_imgs_original)
-    test_masks = load_hdf5(DRIVE_test_groudTruth)
+    # test_imgs_original = load_hdf5(DRIVE_test_imgs_original)
+    # test_masks = load_hdf5(DRIVE_test_groudTruth)
 
-    test_imgs = my_PreProc(test_imgs_original)
-    test_masks = test_masks/255.
-    #extend both images and masks so they can be divided exactly by the patches dimensions
-    test_imgs = test_imgs[0:Imgs_to_test,:,:,:]
-    test_masks = test_masks[0:Imgs_to_test,:,:,:]
+    # test_imgs = my_PreProc(test_imgs_original)
+    # test_masks = test_masks/255.
+    # #extend both images and masks so they can be divided exactly by the patches dimensions
+    # test_imgs = test_imgs[0:Imgs_to_test,:,:,:]
+    # test_masks = test_masks[0:Imgs_to_test,:,:,:]
     test_imgs = paint_border_overlap(test_imgs, patch_height, patch_width, stride_height, stride_width)
+    test_masks = paint_border_overlap(test_masks, patch_height, patch_width, stride_height, stride_width)
 
     #check masks are within 0-1
     assert(np.max(test_masks)==1  and np.min(test_masks)==0)
@@ -114,13 +116,16 @@ def get_data_testing_overlap(DRIVE_test_imgs_original, DRIVE_test_groudTruth, Im
     print "test masks are within 0-1\n"
 
     #extract the TEST patches from the full images
+    print 'test_imgs, test_masks: ', test_imgs.shape, test_masks.shape
     patches_imgs_test = extract_ordered_overlap(test_imgs,patch_height,patch_width,stride_height,stride_width)
 
-    print "\ntest PATCHES images shape:"
-    print patches_imgs_test.shape
+    patches_masks_test = extract_ordered_overlap(test_masks,patch_height,patch_width,stride_height,stride_width)
+
+    print "\ntest PATCHES images shape, test PATCHES masks shape:"
+    print patches_imgs_test.shape, patches_masks_test.shape
     print "test PATCHES images range (min-max): " +str(np.min(patches_imgs_test)) +' - '+str(np.max(patches_imgs_test))
 
-    return patches_imgs_test, test_imgs.shape[2], test_imgs.shape[3], test_masks
+    return patches_imgs_test, patches_masks_test, test_imgs.shape[2], test_imgs.shape[3], test_masks
 
 
 #data consinstency check
@@ -164,23 +169,24 @@ def extract_random(full_imgs,full_masks, patch_h,patch_w, N_patches, inside=True
                     continue
             patch = full_imgs[i,:,y_center-int(patch_h/2):y_center+int(patch_h/2),x_center-int(patch_w/2):x_center+int(patch_w/2)]
             patch_mask = full_masks[i,:,y_center-int(patch_h/2):y_center+int(patch_h/2),x_center-int(patch_w/2):x_center+int(patch_w/2)]
+            if patch.mean()<0.0001 and patch_mask.mean()<0.04: #mask 2 pixel = 1
+            	continue
             patches[iter_tot]=patch
             patches_masks[iter_tot]=patch_mask
             iter_tot +=1   #total
             k+=1  #per full_img
     return patches, patches_masks
-
-
+# echo 'export PATH="/datacommons/henao/staff/dw250/install/Anaconda_Feb13/bin:$PATH"' >> ~/.bashrc
+# /datacommons/henao/staff/dw250/install/Anaconda_Feb13/bin/python
 #check if the patch is fully contained in the FOV
 def is_patch_inside_FOV(x,y,img_w,img_h,patch_h):
     x_ = x - int(img_w/2) # origin (0,0) shifted to image center
     y_ = y - int(img_h/2)  # origin (0,0) shifted to image center
-    R_inside = 270 - int(patch_h * np.sqrt(2.0) / 2.0) #radius is 270 (from DRIVE db docs), minus the patch diagonal (assumed it is a square #this is the limit to contain the full patch in the FOV
+    R_inside = 250 - int(patch_h * np.sqrt(2.0) / 2.0) #radius is 270 (from DRIVE db docs), minus the patch diagonal (assumed it is a square #this is the limit to contain the full patch in the FOV
     radius = np.sqrt((x_*x_)+(y_*y_))
     if radius < R_inside:
         return True
-    else:
-        return False
+    return False
 
 
 #Divide all the full_imgs in pacthes
