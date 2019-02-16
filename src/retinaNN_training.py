@@ -24,9 +24,20 @@ sys.path.insert(0, './lib/')
 from help_functions import *
 
 #function to obtain data for training/testing (validation)
-from extract_patches import get_data_training
+from extract_patches import get_data, get_data_training
 
+import pdb
+import cv2
+import os
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+import keras.backend.tensorflow_backend as KTF
+
+import tensorflow as tf
+config = tf.ConfigProto()  
+config.gpu_options.allow_growth=True   
+session = tf.Session(config=config)
+KTF.set_session(session)
 
 #Define the neural network
 def get_unet(n_ch,patch_height,patch_width):
@@ -145,15 +156,33 @@ batch_size = int(config.get('training settings', 'batch_size'))
 
 
 #============ Load the data and divided in patches
+imgs_new, masks_new = get_data(500)
+resize_scale = 300
+for i in range(imgs_new.shape[0]):
+    imgs_new[i,0,:resize_scale, :resize_scale] = cv2.resize(imgs_new[i,0], (resize_scale, resize_scale))
+    masks_new[i,0,:resize_scale, :resize_scale] = cv2.resize(masks_new[i,0], (resize_scale, resize_scale))
+indx = masks_new<0.5
+masks_new[indx] = 0
+masks_new[~indx] = 1
+# pdb.set_trace()
+training_imgs, training_masks = imgs_new[2:,:,:resize_scale, :resize_scale], masks_new[2:,:,:resize_scale, :resize_scale]
+
 patches_imgs_train, patches_masks_train = get_data_training(
-    DRIVE_train_imgs_original = path_data + config.get('data paths', 'train_imgs_original'),
-    DRIVE_train_groudTruth = path_data + config.get('data paths', 'train_groundTruth'),  #masks
+    training_imgs, training_masks,
     patch_height = int(config.get('data attributes', 'patch_height')),
     patch_width = int(config.get('data attributes', 'patch_width')),
     N_subimgs = int(config.get('training settings', 'N_subimgs')),
     inside_FOV = config.getboolean('training settings', 'inside_FOV') #select the patches only inside the FOV  (default == True)
 )
 
+# patches_imgs_train, patches_masks_train = get_data_training(
+#     DRIVE_train_imgs_original = path_data + config.get('data paths', 'train_imgs_original'),
+#     DRIVE_train_groudTruth = path_data + config.get('data paths', 'train_groundTruth'),  #masks
+#     patch_height = int(config.get('data attributes', 'patch_height')),
+#     patch_width = int(config.get('data attributes', 'patch_width')),
+#     N_subimgs = int(config.get('training settings', 'N_subimgs')),
+#     inside_FOV = config.getboolean('training settings', 'inside_FOV') #select the patches only inside the FOV  (default == True)
+# )
 
 #========= Save a sample of what you're feeding to the neural network ==========
 N_sample = min(patches_imgs_train.shape[0],40)
@@ -197,22 +226,3 @@ model.save_weights('./'+name_experiment+'/'+name_experiment +'_last_weights.h5',
 # score = model.evaluate(patches_imgs_test, masks_Unet(patches_masks_test), verbose=0)
 # print('Test score:', score[0])
 # print('Test accuracy:', score[1])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#
